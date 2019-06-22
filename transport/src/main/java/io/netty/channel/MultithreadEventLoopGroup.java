@@ -23,6 +23,7 @@ import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
+import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
@@ -96,4 +97,5 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
     public ChannelFuture register(Channel channel, ChannelPromise promise) {
         return next().register(channel, promise);
     }
+
 }

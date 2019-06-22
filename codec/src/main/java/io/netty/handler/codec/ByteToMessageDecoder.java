@@ -15,6 +15,8 @@
  */
 package io.netty.handler.codec;
 
+import static io.netty.util.internal.ObjectUtil.checkPositive;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
@@ -134,7 +136,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 return buffer;
             } finally {
                 if (in != null) {
-                    // We must release if the ownership was not transfered as otherwise it may produce a leak if
+                    // We must release if the ownership was not transferred as otherwise it may produce a leak if
                     // writeBytes(...) throw for whatever release (for example because of OutOfMemoryError).
                     in.release();
                 }
@@ -202,9 +204,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      * The default is {@code 16}.
      */
     public void setDiscardAfterReads(int discardAfterReads) {
-        if (discardAfterReads <= 0) {
-            throw new IllegalArgumentException("discardAfterReads must be > 0");
-        }
+        checkPositive(discardAfterReads, "discardAfterReads");
         this.discardAfterReads = discardAfterReads;
     }
 
@@ -241,18 +241,16 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
         if (buf != null) {
             // Directly set this to null so we are sure we not access it in any other method here anymore.
             cumulation = null;
-
+            numReads = 0;
             int readable = buf.readableBytes();
             if (readable > 0) {
                 ByteBuf bytes = buf.readBytes(readable);
                 buf.release();
                 ctx.fireChannelRead(bytes);
+                ctx.fireChannelReadComplete();
             } else {
                 buf.release();
             }
-
-            numReads = 0;
-            ctx.fireChannelReadComplete();
         }
         handlerRemoved0(ctx);
     }
