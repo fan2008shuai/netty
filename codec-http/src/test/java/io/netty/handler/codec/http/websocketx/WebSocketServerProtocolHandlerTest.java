@@ -29,6 +29,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,6 +60,7 @@ public class WebSocketServerProtocolHandlerTest {
         assertEquals(SWITCHING_PROTOCOLS, response.status());
         response.release();
         assertNotNull(WebSocketServerProtocolHandler.getHandshaker(handshakerCtx.channel()));
+        assertFalse(ch.finish());
     }
 
     @Test
@@ -75,6 +77,7 @@ public class WebSocketServerProtocolHandlerTest {
         response = responses.remove();
         assertEquals(FORBIDDEN, response.status());
         response.release();
+        assertFalse(ch.finish());
     }
 
     @Test
@@ -94,6 +97,7 @@ public class WebSocketServerProtocolHandlerTest {
         assertEquals(BAD_REQUEST, response.status());
         assertEquals("not a WebSocket handshake request: missing upgrade", getResponseMessage(response));
         response.release();
+        assertFalse(ch.finish());
     }
 
     @Test
@@ -114,6 +118,47 @@ public class WebSocketServerProtocolHandlerTest {
         assertEquals(BAD_REQUEST, response.status());
         assertEquals("not a WebSocket request: missing key", getResponseMessage(response));
         response.release();
+        assertFalse(ch.finish());
+    }
+
+    @Test
+    public void testCreateUTF8Validator() {
+        WebSocketDecoderConfig config = WebSocketDecoderConfig.newBuilder()
+                .withUTF8Validator(true)
+                .build();
+
+        EmbeddedChannel ch = new EmbeddedChannel(
+                new WebSocketServerProtocolHandler("/test", null, false, false, 1000L, config),
+                new HttpRequestDecoder(),
+                new HttpResponseEncoder(),
+                new MockOutboundHandler());
+        writeUpgradeRequest(ch);
+
+        FullHttpResponse response = responses.remove();
+        assertEquals(SWITCHING_PROTOCOLS, response.status());
+        response.release();
+
+        assertNotNull(ch.pipeline().get(Utf8FrameValidator.class));
+    }
+
+    @Test
+    public void testDoNotCreateUTF8Validator() {
+        WebSocketDecoderConfig config = WebSocketDecoderConfig.newBuilder()
+                .withUTF8Validator(false)
+                .build();
+
+        EmbeddedChannel ch = new EmbeddedChannel(
+                new WebSocketServerProtocolHandler("/test", null, false, false, 1000L, config),
+                new HttpRequestDecoder(),
+                new HttpResponseEncoder(),
+                new MockOutboundHandler());
+        writeUpgradeRequest(ch);
+
+        FullHttpResponse response = responses.remove();
+        assertEquals(SWITCHING_PROTOCOLS, response.status());
+        response.release();
+
+        assertNull(ch.pipeline().get(Utf8FrameValidator.class));
     }
 
     @Test
@@ -121,6 +166,10 @@ public class WebSocketServerProtocolHandlerTest {
         CustomTextFrameHandler customTextFrameHandler = new CustomTextFrameHandler();
         EmbeddedChannel ch = createChannel(customTextFrameHandler);
         writeUpgradeRequest(ch);
+
+        FullHttpResponse response = responses.remove();
+        assertEquals(SWITCHING_PROTOCOLS, response.status());
+        response.release();
 
         if (ch.pipeline().context(HttpRequestDecoder.class) != null) {
             // Removing the HttpRequestDecoder because we are writing a TextWebSocketFrame and thus
@@ -131,6 +180,7 @@ public class WebSocketServerProtocolHandlerTest {
         ch.writeInbound(new TextWebSocketFrame("payload"));
 
         assertEquals("processed: payload", customTextFrameHandler.getContent());
+        assertFalse(ch.finish());
     }
 
     private EmbeddedChannel createChannel() {
@@ -151,7 +201,7 @@ public class WebSocketServerProtocolHandlerTest {
     }
 
     private static String getResponseMessage(FullHttpResponse response) {
-        return new String(response.content().array());
+        return response.content().toString(CharsetUtil.UTF_8);
     }
 
     private class MockOutboundHandler extends ChannelOutboundHandlerAdapter {
